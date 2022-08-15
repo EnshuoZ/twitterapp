@@ -4,12 +4,15 @@ from geotext import GeoText
 from pydantic import BaseModel
 # from fastapi import Response
 from typing import List
+from collections import defaultdict
 import re
 import math
 from collections import Counter
+
 # import nltk
 # import csv
 import tweepy
+import snowballstemmer
 # import ssl
 # from geotext import GeoText
 import pandas as pd
@@ -19,10 +22,12 @@ stop_words = stopwords.words('english')
 
 # Gensim
 import gensim
+from gensim import models
 import gensim.corpora as corpora
 from gensim.utils import simple_preprocess
 from gensim.models import CoherenceModel
-
+from gensim import similarities
+from gensim.corpora import Dictionary
 #sentiment 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -149,7 +154,9 @@ def analyze_semilarity(tex,name):
                            )
     
     #
-   
+    alltweets = []
+    alltweets.extend(tweets)
+    outtweets = [tweet.full_text for tweet in alltweets]
 
 
 
@@ -256,91 +263,120 @@ def analyze_semilarity(tex,name):
     
     
     txt=tex
-    # Remove Emails
-    txt = re.sub('\S*@\S*\s?', '', txt) 
-   
-    # Remove new line characters
-    txt = re.sub('\s+', ' ', txt) 
+    #creating a list of stopwords
 
-    # Remove distracting single quotes
-    txt = re.sub("\'", "", txt) 
-    WORD = re.compile(r"\w+")
-    # remove URLS from the text
-    txt = re.sub('http://\S+|https://\S+', '', txt) 
-    filtered_sentence = []
-    spaces = r"\s+"
-    txt= (re.split(spaces, txt))
+    stoplist = set('for a of the and to in'.split())
 
+
+
+    #removing the stop words
+
+    txts = [[word for word in document.lower().split() if word not in stoplist]for document in data]
+
+
+
+    #calculating frequency of each text
+
+    frequency = defaultdict(int)
+
+    for text in txts:
+
+        for token in text:
+
+            frequency[token] += 1
+
+ 
+       
+    #removing words that appear only once
+
+    txts = [[token for token in text if frequency[token] > 1]for text in txts]
+
+
+
+    #creating a dictionary
+
+    gensim_dictionary = corpora.Dictionary(txts)
+
+
+
+    #vectorizing the corpus
+
+    gensim_corpus = [gensim_dictionary.doc2bow(text) for text in txts]
+
+
+
+    #creating LSI model
+
+    lsi = models.LsiModel(gensim_corpus, id2word=gensim_dictionary, num_topics=2)
+
+
+
+    #query
+
+    doc =txt
+
+
+
+    #creating bow vector
+
+    vec_bow = gensim_dictionary.doc2bow(doc.lower().split())
+
+
+
+    #converting the query to LSI space
+
+    vec_lsi = lsi[vec_bow]  
+
+
+
+
+
+
+
+    #transforming corpus to LSI space and index it
+
+    index = similarities.MatrixSimilarity(lsi[gensim_corpus])  
+
+
+
+    #performing a similarity query against the corpus
+
+    simil = index[vec_lsi]  
+
+    simil=sorted(list(enumerate(simil)),key=lambda item: -item[1])
+
+
+
+#printing (document_number, document_similarity)
+
+# print("Similarity scores for each document\n", simil) 
+
+
+    max=0
+
+    #print("Similarity scores with document")
+
+    for doc_position, doc_score in simil:
+
+    # print(doc_score, data[doc_position])
+        if(doc_score >= max):
+            max=doc_score
+    #print(max)
+
+    max=float("{:.2f}".format(max))
+    txte=str(data).split()
     
-
-    def get_cosine(vec1, vec2):
-        intersection = set(vec1.keys()) & set(vec2.keys())
-        numerator = sum([vec1[x] * vec2[x] for x in intersection])
-
-        sum1 = sum([vec1[x] ** 2 for x in list(vec1.keys())])
-        sum2 = sum([vec2[x] ** 2 for x in list(vec2.keys())])
-        denominator = math.sqrt(sum1) * math.sqrt(sum2)
-
-        if not denominator:
-            return 0.0
-        else:
-            return float(numerator) / denominator
-
-
-    def text_to_vector(text):
-        words = WORD.findall(text)
-        return Counter(words)
-
-    text1 = txt
-    text2 = topics
-    vector1 = text_to_vector(str(text1))
-    vector2 = text_to_vector(str(text2))
-
-    cosine = get_cosine(vector1, vector2)
-    cosine = float("{:.3f}".format(cosine))
-
-
-
-
-    if( cosine>=0.08):
-        return "Excellent! you have more than 80 percent similarity with your previous tweets"
-    elif(cosine>=0.060 and cosine<0.08):
-        return "Good! you have 60 to 80 percent similarity with your previous tweets"
-    elif(cosine>=0.050 and cosine<0.06):
-        return "Nice! you have 50 to 60 percent similarity with your previous tweets"
-    elif( cosine<0.05):
-        return "Unfortunately! you have less than 50 percent similarity with your previous tweets"
-    return cosine,topics
-
-    print("Cosine:", cosine)
-
-
-
-
-
-    
-    # return topics
-    # list_1 = tex.split()
-    # return filtered_sentence
-
-
-    """ returns the jaccard similarity between two lists """
-    intersection_cardinality = len(set.intersection(*[set(topics), set(filtered_sentence)]))
-    union_cardinality = len(set.union(*[set(topics), set(filtered_sentence)]))
-    similarity=intersection_cardinality/float(union_cardinality)
-    similarity = float("{:.3f}".format(similarity))
-    
-
-    
-    # counter=0
-    # for token in filtered_sentence:
-    #     if token in topics :
-    #         counter+=1
-    #         print(token) 
-    # if counter>=round(len(topic)/10):
-    #     return True
+    counter=0
+    for token in txte:
+        if token in topics :
+            counter+=1
         
-    # return False  
+    if counter>=round(len(topics)/10):
+        return('Good Topic! The similarity is ' + str(max))
+    else:
+        return('Bad Topic! The similarity is '+ str(max))
+    
+
         
 def remove_Words(tex,dic):
     tex=tex.lower()
