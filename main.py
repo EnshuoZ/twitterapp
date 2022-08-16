@@ -255,8 +255,12 @@ def analyze_semilarity(tex,name):
                                         #    alpha='auto',
                                            per_word_topics=True)
     keywordstopic=lda_model.show_topics()
-    
-    
+    alltopicWords=[]
+    for topicNum,topicWords in keywordstopic:
+        words_foreachtopic = re.findall("[a-zA-Z]+",keywordstopic[topicNum][1])
+        alltopicWords+=words_foreachtopic
+    alltopicWordsset=set(alltopicWords)
+    alltopicWords=list(alltopicWordsset)
     # get the topics
     for topicNum,topicWords in keywordstopic:
         topics = re.findall("[a-zA-Z]+",keywordstopic[topicNum][1])
@@ -364,13 +368,26 @@ def analyze_semilarity(tex,name):
     #print(max)
 
     max=float("{:.2f}".format(max))
-    txte=str(data).split()
-    
+    tex=tex.lower()
+    def preprocess(text):
+        remove_url = re.sub(r"http\S+", "", text)
+        # remove_number=remove_url.replace('\d+', '')
+        regEx = re.compile("\W").split(remove_url)  # split non-letter characters and store them into a list.
+        token = [i for i in regEx if i != '']
+        casefolding = [s.lower() for s in token if isinstance(s, str) == True]  # all in lower case.
+        stopwords_removed = [w for w in casefolding if not w in stoplist]  # removing stop words.
+        stemmer = snowballstemmer.stemmer('english')  # Porter stemmer by using snowball stemmer lib.
+        return stemmer.stemWords(stopwords_removed)
+    tex=preprocess(tex)
+    # txte=str(tex).split()
+    tok=[]
     counter=0
-    for token in txte:
-        if token in topics :
-            counter+=1
-        
+    for token in tex:
+        tok.append(token)
+        if token in alltopicWords :
+            counter=counter+1
+            
+    # return alltopicWords ,counter,tok   
     if counter>=round(len(topics)/10):
         return('Good Topic! The similarity is ' + str(max))
     else:
